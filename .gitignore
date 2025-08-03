@@ -28,7 +28,7 @@ temp_*
 
 input_documents/
 
-**.md
+**/*.md
 **.docx
 **.pdf
 **.txt
