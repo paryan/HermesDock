@@ -1,0 +1,42 @@
+# Build output
+dist/
+
+# Backups
+backups/
+*.backup
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.temp
+temp_*
+
+input_documents/
+
+**.md
+**.docx
+**.pdf
+**.txt
+**.csv
+**.json
+**.xml
+**.yaml
+**.yml
+**.html
+**.css
+**.js
