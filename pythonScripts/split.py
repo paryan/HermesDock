@@ -49,21 +49,39 @@ class ConfigBasedSplitter:
         
         lines = content.split('\n')
         
-        # Find all level 2 headers in the document
-        doc_headers = []
+        # Find all level 1, level 2, and level 3 headers in the document
+        doc_headers_level1 = []
+        doc_headers_level2 = []
+        doc_headers_level3 = []
         for line in lines:
-            match = re.match(r'^##\s+(.+)$', line)
+            match = re.match(r'^#\s+(.+)$', line)
             if match:
-                doc_headers.append(match.group(1))
+                doc_headers_level1.append(match.group(1))
+            else:
+                match = re.match(r'^##\s+(.+)$', line)
+                if match:
+                    doc_headers_level2.append(match.group(1))
+                else:
+                    match = re.match(r'^###\s+(.+)$', line)
+                    if match:
+                        doc_headers_level3.append(match.group(1))
         
         # Check if all configuration patterns exist in the document
         outline = config.get('document_outline', [])
         for section in outline:
             pattern = section.get('start_pattern', '')
-            # Extract the heading from the pattern (remove ## prefix)
-            if pattern.startswith('## '):
+            # Extract the heading from the pattern (remove #, ##, or ### prefix)
+            if pattern.startswith('# '):
+                heading = pattern[2:]
+                if heading not in doc_headers_level1:
+                    return False
+            elif pattern.startswith('## '):
                 heading = pattern[3:]
-                if heading not in doc_headers:
+                if heading not in doc_headers_level2:
+                    return False
+            elif pattern.startswith('### '):
+                heading = pattern[4:]
+                if heading not in doc_headers_level3:
                     return False
         
         return True
@@ -104,36 +122,62 @@ class ConfigBasedSplitter:
             
             lines = content.split('\n')
             
-            # Find all level 2 headers (##)
+            # Find all level 1, level 2, and level 3 headers (#, ##, and ###)
+            level1_headers = []
             level2_headers = []
+            level3_headers = []
+            
             for i, line in enumerate(lines):
-                match = re.match(r'^##\s+(.+)$', line)
+                match = re.match(r'^#\s+(.+)$', line)
                 if match:
                     heading = match.group(1)
-                    level2_headers.append((i, heading))
+                    level1_headers.append((i, heading))
+                else:
+                    match = re.match(r'^##\s+(.+)$', line)
+                    if match:
+                        heading = match.group(1)
+                        level2_headers.append((i, heading))
+                    else:
+                        match = re.match(r'^###\s+(.+)$', line)
+                        if match:
+                            heading = match.group(1)
+                            level3_headers.append((i, heading))
             
-            if not level2_headers:
-                print("No level 2 headers found. Creating basic configuration.")
+            # Use level 1 headers if available, otherwise use level 2 headers, otherwise use level 3 headers
+            if len(level1_headers) > 1:  # More than just the title
+                print(f"Found {len(level1_headers)} level 1 headers, using those for sections.")
+                headers_to_use = level1_headers
+                header_prefix = '#'
+            elif len(level2_headers) > 1:  # More than just a subtitle
+                print(f"Found {len(level2_headers)} level 2 headers, using those for sections.")
+                headers_to_use = level2_headers
+                header_prefix = '##'
+            elif len(level3_headers) > 0:
+                print(f"Found {len(level3_headers)} level 3 headers, using those for sections.")
+                headers_to_use = level3_headers
+                header_prefix = '###'
+            else:
+                print("No suitable headers found. Creating basic configuration.")
                 return self.create_config_from_document()
             
             # Create configuration based on actual headings
             document_outline = []
-            for i, (line_idx, heading) in enumerate(level2_headers):
+            for i, (line_idx, heading) in enumerate(headers_to_use):
                 # Create a clean ID from the heading
                 clean_id = re.sub(r'[^a-zA-Z0-9\s]', '', heading.lower())
                 clean_id = re.sub(r'\s+', '_', clean_id.strip())
                 
                 # Determine end pattern
-                if i < len(level2_headers) - 1:
-                    next_heading = level2_headers[i + 1][1]
-                    end_pattern = f'## {next_heading}'
+                if i < len(headers_to_use) - 1:
+                    next_heading = headers_to_use[i + 1][1]
+                    end_pattern = f'{header_prefix} {next_heading}'
                 else:
                     end_pattern = None
                 
                 section = {
                     'id': clean_id,
                     'heading': heading,
-                    'start_pattern': f'## {heading}',
+                    'start_pattern': f'{header_prefix} {heading}',
                     'end_pattern': end_pattern
                 }
                 document_outline.append(section)
