@@ -9,8 +9,8 @@ It allows users to work on individual sections while AI has access to the comple
 
 ```
 HermesDock/
-├── modules/              # All modular documentation files
-├── dist/                 # Built documentation (generated)
+├── modules/             # All modular documentation files
+├── dist/                # Built documentation (generated)
 ├── changeLogs/          # Version history and changelogs
 ├── downloadedChanges/   # Changes from AI chat sessions
 ├── pythonScripts/       # Build and helper scripts
