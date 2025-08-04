@@ -14,55 +14,140 @@ import argparse
 from pathlib import Path
 
 class ConfigBasedSplitter:
-    def __init__(self, config_name):
+    def __init__(self, config_name, input_file=None):
         self.config_name = config_name
         self.config_dir = Path(__file__).parent / "data"
         self.modules_dir = Path.cwd() / "modules"
         self.modules_dir.mkdir(exist_ok=True)
         
         # Load configuration
-        self.config = self.load_config()
+        self.config = self.load_config(input_file)
         
-    def load_config(self):
+    def load_config(self, input_file=None):
         """Load the document configuration or create one if it doesn't exist"""
         config_path = self.config_dir / f"{self.config_name}.yaml"
         if not config_path.exists():
             print(f"Configuration not found: {config_path}")
             print("Creating configuration automatically...")
-            return self.create_config_from_document()
+            return self.create_config_from_document(input_file)
         
         with open(config_path, 'r') as f:
-            return yaml.safe_load(f)
+            config = yaml.safe_load(f)
+        
+        # If input_file is provided, validate that the configuration matches the document
+        if input_file:
+            if not self.validate_config_against_document(config, input_file):
+                print(f"Configuration doesn't match document structure. Regenerating...")
+                return self.create_config_from_document(input_file)
+        
+        return config
     
-    def create_config_from_document(self):
+    def validate_config_against_document(self, config, input_file):
+        """Validate that the configuration patterns match the document structure"""
+        with open(input_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        lines = content.split('\n')
+        
+        # Find all level 2 headers in the document
+        doc_headers = []
+        for line in lines:
+            match = re.match(r'^##\s+(.+)$', line)
+            if match:
+                doc_headers.append(match.group(1))
+        
+        # Check if all configuration patterns exist in the document
+        outline = config.get('document_outline', [])
+        for section in outline:
+            pattern = section.get('start_pattern', '')
+            # Extract the heading from the pattern (remove ## prefix)
+            if pattern.startswith('## '):
+                heading = pattern[3:]
+                if heading not in doc_headers:
+                    return False
+        
+        return True
+    
+    def create_config_from_document(self, input_file=None):
         """Create a configuration by analyzing the document structure"""
-        # This would be called when no configuration exists
-        # For now, we'll create a basic configuration
-        # In the future, this could analyze the document and create sections automatically
         
-        print("Creating basic configuration...")
-        print("You can customize this later by editing the configuration file.")
-        
-        # Create a basic configuration
-        config = {
-            'filename': f"{self.config_name.title()}_Document.md",
-            'prefix': self.config_name.upper(),
-            'title': f"{self.config_name.title()} Document",
-            'document_outline': [
-                {
-                    'id': 'overview',
-                    'heading': 'Overview',
-                    'start_pattern': '## Overview',
-                    'end_pattern': '## Next Section'
-                },
-                {
-                    'id': 'content',
-                    'heading': 'Main Content',
-                    'start_pattern': '## Next Section',
-                    'end_pattern': None
+        if input_file is None:
+            print("Creating basic configuration...")
+            print("You can customize this later by editing the configuration file.")
+            
+            # Create a basic configuration
+            config = {
+                'filename': f"{self.config_name.title()}_Document.md",
+                'prefix': self.config_name.upper(),
+                'title': f"{self.config_name.title()} Document",
+                'document_outline': [
+                    {
+                        'id': 'overview',
+                        'heading': 'Overview',
+                        'start_pattern': '## Overview',
+                        'end_pattern': '## Next Section'
+                    },
+                    {
+                        'id': 'content',
+                        'heading': 'Main Content',
+                        'start_pattern': '## Next Section',
+                        'end_pattern': None
+                    }
+                ]
+            }
+        else:
+            print(f"Analyzing document structure to create configuration...")
+            
+            # Read the document and extract headings
+            with open(input_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            lines = content.split('\n')
+            
+            # Find all level 2 headers (##)
+            level2_headers = []
+            for i, line in enumerate(lines):
+                match = re.match(r'^##\s+(.+)$', line)
+                if match:
+                    heading = match.group(1)
+                    level2_headers.append((i, heading))
+            
+            if not level2_headers:
+                print("No level 2 headers found. Creating basic configuration.")
+                return self.create_config_from_document()
+            
+            # Create configuration based on actual headings
+            document_outline = []
+            for i, (line_idx, heading) in enumerate(level2_headers):
+                # Create a clean ID from the heading
+                clean_id = re.sub(r'[^a-zA-Z0-9\s]', '', heading.lower())
+                clean_id = re.sub(r'\s+', '_', clean_id.strip())
+                
+                # Determine end pattern
+                if i < len(level2_headers) - 1:
+                    next_heading = level2_headers[i + 1][1]
+                    end_pattern = f'## {next_heading}'
+                else:
+                    end_pattern = None
+                
+                section = {
+                    'id': clean_id,
+                    'heading': heading,
+                    'start_pattern': f'## {heading}',
+                    'end_pattern': end_pattern
                 }
-            ]
-        }
+                document_outline.append(section)
+            
+            # Create filename from document name
+            doc_name = Path(input_file).stem
+            filename = f"{doc_name.replace(' ', '_')}.md"
+            
+            config = {
+                'filename': filename,
+                'prefix': self.config_name.upper(),
+                'title': doc_name,
+                'document_outline': document_outline
+            }
         
         # Save the configuration
         config_path = self.config_dir / f"{self.config_name}.yaml"
@@ -209,9 +294,11 @@ class ConfigBasedSplitter:
                 pattern = section['start_pattern']
                 found = False
                 for line_num, level, heading in headers:
-                    if pattern in heading:
+                    # Check if the pattern matches the full line (including markdown syntax)
+                    full_line = '#' * level + ' ' + heading
+                    if pattern in full_line:
                         found = True
-                        print(f"  ✓ {section['id']}: '{pattern}' found in '{heading}' (line {line_num})")
+                        print(f"  ✓ {section['id']}: '{pattern}' found in '{full_line}' (line {line_num})")
                         break
                 
                 if not found:
@@ -243,7 +330,7 @@ def main():
     args = parser.parse_args()
     
     try:
-        splitter = ConfigBasedSplitter(args.config)
+        splitter = ConfigBasedSplitter(args.config, args.input_file)
         
         if args.analyze:
             splitter.analyze_document(args.input_file)
