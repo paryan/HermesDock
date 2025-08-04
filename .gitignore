@@ -27,8 +27,12 @@ Thumbs.db
 temp_*
 
 input_documents/
+core/
+modules/
+pythonScripts/data/*.yaml
+pythonScripts/data/reference.docx
 
-**/*.md
+*/*.md
 **.docx
 **.pdf
 **.txt
